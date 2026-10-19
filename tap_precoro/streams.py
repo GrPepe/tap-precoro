@@ -183,11 +183,15 @@ class InvoicesStream(ExternalIdTwoPassMixin, TransactionsStream):
             )
             return None
 
-        # Filter by perantIdn: only keep invoices where there are no parentIdn
-        parent_idn = row.get("parentIdn")
+        # Filter split-cost children: only keep the base invoice, so it's the
+        # only one ever exported. The API used to expose this as a flat
+        # `parentIdn` string; it's now nested under `parentData.idn` - the old
+        # flat key no longer exists in the response, so the check silently
+        # never matched and children leaked through.
+        parent_idn = (row.get("parentData") or {}).get("idn")
         if parent_idn:
             self.logger.info(
-                f"Invoice with id {row['id']} skipped because parenIdn: '{parent_idn}'"
+                f"Invoice with id {row['id']} skipped because parentData.idn: '{parent_idn}'"
             )
             return None
 
@@ -819,6 +823,7 @@ class CreditNotesStream(ExternalIdTwoPassMixin, TransactionsStream):
         if getattr(self, "_fetch_processing_only", False):
             params.pop("modifiedSince", None)
             params.pop("status[]", None)
+            params["integrationStatus[]"] = 7
         return params
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
